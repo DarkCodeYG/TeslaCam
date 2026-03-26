@@ -172,12 +172,32 @@ export default function VideoPlayer({ clip, onExport, isExporting, exportStatus,
           gap: 2, background: '#000', padding: 2,
         }}>
           {activeVideos.map((item, i) => {
-            if (focusedIdx !== null && i !== focusedIdx) return null
+            const hidden = focusedIdx !== null && i !== focusedIdx
             return (
               <div
                 key={item.key}
-                style={{ position: 'relative', background: '#000', cursor: 'pointer', overflow: 'hidden' }}
-                onDoubleClick={() => setFocusedIdx(focusedIdx === i ? null : i)}
+                style={{
+                  position: 'relative', background: '#000', cursor: 'pointer', overflow: 'hidden',
+                  display: hidden ? 'none' : 'block',
+                }}
+                onDoubleClick={() => {
+                  if (focusedIdx === i) {
+                    setFocusedIdx(null)
+                    // Re-sync all videos to the focused video's currentTime
+                    const focusedVideo = videoRefs.current[i]
+                    if (focusedVideo) {
+                      const t = focusedVideo.currentTime
+                      videoRefs.current.forEach((v, idx) => {
+                        if (v && idx !== i) {
+                          v.currentTime = t
+                          if (isPlaying) v.play().catch(() => {})
+                        }
+                      })
+                    }
+                  } else {
+                    setFocusedIdx(i)
+                  }
+                }}
               >
                 <video
                   ref={el => { videoRefs.current[i] = el }}
