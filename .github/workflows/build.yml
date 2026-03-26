@@ -1,0 +1,95 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx electron-vite build
+      - run: npx electron-builder --mac --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-mac
+          path: |
+            release/*.dmg
+            release/*.zip
+
+  build-win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx electron-vite build
+      - run: npx electron-builder --win --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-win
+          path: |
+            release/*.exe
+
+  release:
+    needs: [build-mac, build-win]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: false
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/release-mac/*
+            artifacts/release-win/*
+          body: |
+            ## TeslaCam Viewer ${{ github.ref_name }}
+
+            Tesla 대시캠 4채널 동시 재생 및 내보내기 도구
+
+            ### 다운로드
+            - **macOS**: `.dmg` 다운로드 → quarantine 해제 후 설치 (`xattr -d com.apple.quarantine 파일.dmg`)
+            - **Windows**: `.exe` 다운로드 후 실행 (설치 버전 / 포터블 버전)
+
+            ### 주요 기능
+            - 4채널 영상 동기 재생 (전면/후면/우측/좌측)
+            - 폴더 선택 시 자동 타임스탬프 그룹핑
+            - 재생 컨트롤: 재생/일시정지, ±5초/±10초 스킵, 타임라인 시크
+            - 배속 조절: 0.25x ~ 4x
+            - 더블클릭으로 단일 카메라 확대
+            - 클립 연속 재생
+            - **텔레메트리 실시간 표시** (H.264 SEI 메타데이터 자동 파싱)
+              - 속도계, 기어 상태
+              - 핸들 조향각 회전 애니메이션
+              - 좌/우 깜빡이 (비상등 포함)
+              - 브레이크/악셀 게이지
+              - 오토파일럿 상태 (OFF/FSD/Autosteer/TACC)
+              - GPS 위치 지도 표시
+            - 4채널 합성 영상 내보내기 (텔레메트리 패널 + 지도 포함)
+            - ffmpeg 내장 — 별도 설치 불필요
