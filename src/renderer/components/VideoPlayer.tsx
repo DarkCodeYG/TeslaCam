@@ -17,10 +17,19 @@ function formatClock(d: Date): string {
   return d.toTimeString().slice(0, 8)
 }
 
-const CAMERAS: { key: keyof ClipGroup['files']; label: string }[] = [
+const CAMERAS_4CH: { key: keyof ClipGroup['files']; label: string }[] = [
   { key: 'front', label: '전면' },
   { key: 'back', label: '후면' },
   { key: 'right_repeater', label: '우측' },
+  { key: 'left_repeater', label: '좌측' },
+]
+
+const CAMERAS_6CH: { key: keyof ClipGroup['files']; label: string }[] = [
+  { key: 'right_pillar', label: '우측B필러' },
+  { key: 'front', label: '전면' },
+  { key: 'left_pillar', label: '좌측B필러' },
+  { key: 'right_repeater', label: '우측' },
+  { key: 'back', label: '후면' },
   { key: 'left_repeater', label: '좌측' },
 ]
 
@@ -42,7 +51,9 @@ export default function VideoPlayer({ clip, onExport, isExporting, exportStatus,
   const seekingRef = useRef(false)
   const rafRef = useRef(0)
 
-  const activeVideos = CAMERAS
+  const hasPillar = !!(clip.files.left_pillar || clip.files.right_pillar)
+  const cameraList = hasPillar ? CAMERAS_6CH : CAMERAS_4CH
+  const activeVideos = cameraList
     .map((cam, idx) => ({ ...cam, path: clip.files[cam.key], idx }))
     .filter(v => v.path)
 
@@ -167,7 +178,7 @@ export default function VideoPlayer({ clip, onExport, isExporting, exportStatus,
         <div style={{
           flex: '1 1 0', minHeight: 0,
           display: 'grid',
-          gridTemplateColumns: focusedIdx !== null ? '1fr' : '1fr 1fr',
+          gridTemplateColumns: focusedIdx !== null ? '1fr' : activeVideos.length > 4 ? '1fr 1fr 1fr' : '1fr 1fr',
           gridTemplateRows: focusedIdx !== null ? '1fr' : '1fr 1fr',
           gap: 2, background: '#000', padding: 2,
         }}>
@@ -296,7 +307,7 @@ export default function VideoPlayer({ clip, onExport, isExporting, exportStatus,
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {focusedIdx !== null && (
-              <Btn onClick={() => setFocusedIdx(null)}>4분할</Btn>
+              <Btn onClick={() => setFocusedIdx(null)}>{activeVideos.length > 4 ? '6분할' : '4분할'}</Btn>
             )}
             {showExport && (
               <>

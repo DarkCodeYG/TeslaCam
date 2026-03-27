@@ -9,6 +9,8 @@ interface ClipGroup {
     back?: string
     left_repeater?: string
     right_repeater?: string
+    left_pillar?: string
+    right_pillar?: string
   }
 }
 
@@ -38,7 +40,7 @@ interface ElectronAPI {
   saveTelemetryFrames: (frames: Uint8Array[]) => Promise<string>
   cleanupTemp: (dir: string) => Promise<void>
   exportVideo: (options: {
-    files: { front?: string; back?: string; left?: string; right?: string }
+    files: { front?: string; back?: string; left?: string; right?: string; left_pillar?: string; right_pillar?: string }
     outputPath: string
     clipTimestamp?: string
     telemetryDir?: string

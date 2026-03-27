@@ -187,6 +187,8 @@ interface ClipGroup {
     back?: string
     left_repeater?: string
     right_repeater?: string
+    left_pillar?: string
+    right_pillar?: string
   }
 }
 
@@ -195,7 +197,7 @@ ipcMain.handle('scan-folder', async (_event, folderPath: string): Promise<ClipGr
   const mp4Files = entries.filter(f => f.endsWith('.mp4'))
   const groups = new Map<string, ClipGroup>()
 
-  const pattern = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})-(front|back|left_repeater|right_repeater)\.mp4$/
+  const pattern = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})-(front|back|left_repeater|right_repeater|left_pillar|right_pillar)\.mp4$/
 
   for (const file of mp4Files) {
     const match = file.match(pattern)
@@ -229,8 +231,13 @@ ipcMain.handle('select-export-path', async () => {
   return result.filePath
 })
 
+interface ExportFiles {
+  front?: string; back?: string; left?: string; right?: string
+  left_pillar?: string; right_pillar?: string
+}
+
 ipcMain.handle('export-video', async (_event, options: {
-  files: { front?: string; back?: string; left?: string; right?: string }
+  files: ExportFiles
   outputPath: string
   clipTimestamp?: string
   telemetryDir?: string
@@ -242,7 +249,7 @@ ipcMain.handle('export-video', async (_event, options: {
 })
 
 async function exportVideo(options: {
-  files: { front?: string; back?: string; left?: string; right?: string }
+  files: ExportFiles
   outputPath: string
   clipTimestamp?: string
   telemetryDir?: string
@@ -253,7 +260,6 @@ async function exportVideo(options: {
   let ffmpegPath: string
   try {
     let p = require('@ffmpeg-installer/ffmpeg').path as string
-    // In packaged app, asar path won't work for spawning — use unpacked path
     if (p.includes('app.asar')) {
       p = p.replace('app.asar', 'app.asar.unpacked')
     }
@@ -264,36 +270,50 @@ async function exportVideo(options: {
 
   const { files, outputPath, clipTimestamp, telemetryDir, fps, startTime, duration } = options
 
-  const halfW = 640
-  const halfH = 480
-  const gridW = halfW * 2   // 1280
-  const gridH = halfH * 2   // 960
+  const available = Object.entries(files).filter(([, path]) => path) as [string, string][]
+  if (available.length === 0) {
+    return { success: false, error: '내보낼 영상 파일이 없습니다.' }
+  }
+
+  // Detect if HW4 (6-channel) by checking for pillar cameras
+  const hasPillar = available.some(([key]) => key.includes('pillar'))
+  const cols = hasPillar ? 3 : 2
+  const rows = 2
+
+  // Cell size: HW4 native uses larger resolution, HW3 uses 640x480
+  const cellW = hasPillar ? 724 : 640
+  const cellH = hasPillar ? 469 : 480
+  const gridW = cellW * cols
+  const gridH = cellH * rows
   const panelW = telemetryDir ? 260 : 0
   const outW = gridW + panelW
   const outH = gridH
 
-  const posMap: Record<string, [number, number]> = {
+  // Position map: 4ch = 2x2, 6ch = 3x2
+  // 6ch layout:  우측B필러 | 전면 | 좌측B필러
+  //              우측      | 후면 | 좌측
+  const posMap: Record<string, [number, number]> = hasPillar ? {
+    right_pillar: [0, 0],
+    front: [cellW, 0],
+    left_pillar: [cellW * 2, 0],
+    right: [0, cellH],
+    back: [cellW, cellH],
+    left: [cellW * 2, cellH],
+  } : {
     front: [0, 0],
-    back: [halfW, 0],
-    right: [0, halfH],
-    left: [halfW, halfH],
-  }
-
-  const available = Object.entries(files).filter(([, path]) => path) as [string, string][]
-  if (available.length === 0) {
-    return { success: false, error: '내보낼 영상 파일이 없습니다.' }
+    back: [cellW, 0],
+    right: [0, cellH],
+    left: [cellW, cellH],
   }
 
   const args: string[] = []
 
   if (startTime && startTime > 0) args.push('-ss', startTime.toString())
 
-  // Video inputs (indices 0..N-1)
   for (const [, path] of available) {
     args.push('-i', path)
   }
 
-  // Telemetry image sequence input (index N)
   const telIdx = available.length
   if (telemetryDir) {
     args.push('-framerate', String(fps || 36), '-i', join(telemetryDir, 'frame_%06d.png'))
@@ -322,17 +342,17 @@ async function exportVideo(options: {
     const filterParts: string[] = []
     const labelMap: Record<string, string> = {
       front: '전면', back: '후면', left: '좌측', right: '우측',
+      left_pillar: '좌측B필러', right_pillar: '우측B필러',
     }
 
     for (let i = 0; i < available.length; i++) {
       const label = labelMap[available[i][0]] || available[i][0]
       filterParts.push(
-        `[${i}:v]scale=${halfW}:${halfH},` +
+        `[${i}:v]scale=${cellW}:${cellH},` +
         `drawtext=fontfile=${fontPath}:text='${label}':fontsize=20:fontcolor=white:borderw=2:bordercolor=black:x=8:y=8[v${i}]`
       )
     }
 
-    // Canvas: full width including telemetry panel
     filterParts.push(`color=black:s=${outW}x${outH}:d=3600[base]`)
 
     let currentBase = 'base'
@@ -343,14 +363,12 @@ async function exportVideo(options: {
       currentBase = nextLabel
     }
 
-    // Overlay telemetry panel on the right side
     if (telemetryDir) {
       filterParts.push(`[${telIdx}:v]scale=${panelW}:${outH}[tpanel]`)
       filterParts.push(`[${currentBase}][tpanel]overlay=${gridW}:0:shortest=1[withtel]`)
       currentBase = 'withtel'
     }
 
-    // Timestamp overlay
     if (epoch) {
       filterParts.push(
         `[${currentBase}]drawtext=fontfile=${fontPath}:text='%{pts\\:localtime\\:${epoch}}':fontsize=28:fontcolor=white:borderw=2:bordercolor=black:x=${gridW}-tw-12:y=10[out]`

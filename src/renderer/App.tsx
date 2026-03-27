@@ -62,6 +62,8 @@ export default function App() {
         back: selectedClip.files.back,
         left: selectedClip.files.left_repeater,
         right: selectedClip.files.right_repeater,
+        left_pillar: selectedClip.files.left_pillar,
+        right_pillar: selectedClip.files.right_pillar,
       },
       outputPath,
       clipTimestamp: selectedClip.timestamp,
