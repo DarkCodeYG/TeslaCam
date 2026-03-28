@@ -17,20 +17,22 @@ function formatClock(d: Date): string {
   return d.toTimeString().slice(0, 8)
 }
 
+const isKo = navigator.language.startsWith('ko')
+
 const CAMERAS_4CH: { key: keyof ClipGroup['files']; label: string }[] = [
-  { key: 'front', label: '전면' },
-  { key: 'back', label: '후면' },
-  { key: 'right_repeater', label: '우측' },
-  { key: 'left_repeater', label: '좌측' },
+  { key: 'front', label: isKo ? '전면' : 'Front' },
+  { key: 'back', label: isKo ? '후면' : 'Rear' },
+  { key: 'right_repeater', label: isKo ? '우측' : 'Right' },
+  { key: 'left_repeater', label: isKo ? '좌측' : 'Left' },
 ]
 
 const CAMERAS_6CH: { key: keyof ClipGroup['files']; label: string }[] = [
-  { key: 'right_pillar', label: '우측B필러' },
-  { key: 'front', label: '전면' },
-  { key: 'left_pillar', label: '좌측B필러' },
-  { key: 'right_repeater', label: '우측' },
-  { key: 'back', label: '후면' },
-  { key: 'left_repeater', label: '좌측' },
+  { key: 'right_pillar', label: isKo ? '우측B필러' : 'Right B-Pillar' },
+  { key: 'front', label: isKo ? '전면' : 'Front' },
+  { key: 'left_pillar', label: isKo ? '좌측B필러' : 'Left B-Pillar' },
+  { key: 'right_repeater', label: isKo ? '우측' : 'Right' },
+  { key: 'back', label: isKo ? '후면' : 'Rear' },
+  { key: 'left_repeater', label: isKo ? '좌측' : 'Left' },
 ]
 
 const SPEEDS = [0.25, 0.5, 1, 1.5, 2, 4]
@@ -288,7 +290,7 @@ export default function VideoPlayer({ clip, onExport, isExporting, exportStatus,
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ fontSize: 12, color: '#aaa', marginRight: 4 }}>배속:</span>
+            <span style={{ fontSize: 12, color: '#aaa', marginRight: 4 }}>{isKo ? '배속:' : 'Speed:'}</span>
             {SPEEDS.map(s => (
               <button
                 key={s}
@@ -307,19 +309,19 @@ export default function VideoPlayer({ clip, onExport, isExporting, exportStatus,
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {focusedIdx !== null && (
-              <Btn onClick={() => setFocusedIdx(null)}>{activeVideos.length > 4 ? '6분할' : '4분할'}</Btn>
+              <Btn onClick={() => setFocusedIdx(null)}>{activeVideos.length > 4 ? (isKo ? '6분할' : '6-Grid') : (isKo ? '4분할' : '4-Grid')}</Btn>
             )}
             {showExport && (
               <>
                 <label style={{ fontSize: 12, color: '#aaa' }}>
-                  시작(초):
+                  {isKo ? '시작(초):' : 'Start(s):'}
                   <input type="number" min={0} value={exportStart}
                     onChange={e => setExportStart(Number(e.target.value))}
                     style={{ width: 55, marginLeft: 4, padding: '2px 4px', background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 4, color: '#eee', fontSize: 12 }}
                   />
                 </label>
                 <label style={{ fontSize: 12, color: '#aaa' }}>
-                  길이(초):
+                  {isKo ? '길이(초):' : 'Duration(s):'}
                   <input type="number" min={0} value={exportDuration}
                     onChange={e => setExportDuration(Number(e.target.value))}
                     style={{ width: 55, marginLeft: 4, padding: '2px 4px', background: '#0f0f1a', border: '1px solid #2a2a4a', borderRadius: 4, color: '#eee', fontSize: 12 }}
@@ -340,7 +342,7 @@ export default function VideoPlayer({ clip, onExport, isExporting, exportStatus,
                   background: isExporting ? '#666' : '#e94560', color: '#fff',
                 }}
               >
-                {isExporting ? '내보내는 중...' : showExport ? '내보내기 시작' : '내보내기'}
+                {isExporting ? (isKo ? '내보내는 중...' : 'Exporting...') : showExport ? (isKo ? '내보내기 시작' : 'Start Export') : (isKo ? '내보내기' : 'Export')}
               </button>
               {isExporting && exportStatus && (
                 <span style={{ fontSize: 11, color: '#f39c12', whiteSpace: 'nowrap' }}>
@@ -349,7 +351,7 @@ export default function VideoPlayer({ clip, onExport, isExporting, exportStatus,
               )}
             </div>
             {showExport && !isExporting && (
-              <Btn onClick={() => setShowExport(false)}>취소</Btn>
+              <Btn onClick={() => setShowExport(false)}>{isKo ? '취소' : 'Cancel'}</Btn>
             )}
           </div>
         </div>

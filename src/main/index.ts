@@ -172,7 +172,7 @@ ipcMain.handle('extract-telemetry', async (_event, filePath: string) => {
 ipcMain.handle('select-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
     properties: ['openDirectory'],
-    title: 'TeslaCam 폴더 선택',
+    title: app.getLocale().startsWith('ko') ? 'TeslaCam 폴더 선택' : 'Select TeslaCam Folder',
   })
   if (result.canceled) return null
   return result.filePaths[0]
@@ -223,7 +223,7 @@ ipcMain.handle('scan-folder', async (_event, folderPath: string): Promise<ClipGr
 
 ipcMain.handle('select-export-path', async () => {
   const result = await dialog.showSaveDialog(mainWindow!, {
-    title: '내보내기 경로 선택',
+    title: app.getLocale().startsWith('ko') ? '내보내기 경로 선택' : 'Select Export Path',
     defaultPath: 'teslacam_export.mp4',
     filters: [{ name: 'MP4 Video', extensions: ['mp4'] }],
   })
@@ -272,7 +272,7 @@ async function exportVideo(options: {
 
   const available = Object.entries(files).filter(([, path]) => path) as [string, string][]
   if (available.length === 0) {
-    return { success: false, error: '내보낼 영상 파일이 없습니다.' }
+    return { success: false, error: app.getLocale().startsWith('ko') ? '내보낼 영상 파일이 없습니다.' : 'No video files to export.' }
   }
 
   // Detect if HW4 (6-channel) by checking for pillar cameras
@@ -308,14 +308,14 @@ async function exportVideo(options: {
 
   const args: string[] = []
 
-  if (startTime && startTime > 0) args.push('-ss', startTime.toString())
-
   for (const [, path] of available) {
+    if (startTime && startTime > 0) args.push('-ss', startTime.toString())
     args.push('-i', path)
   }
 
   const telIdx = available.length
   if (telemetryDir) {
+    if (startTime && startTime > 0) args.push('-ss', startTime.toString())
     args.push('-framerate', String(fps || 36), '-i', join(telemetryDir, 'frame_%06d.png'))
   }
 
@@ -334,15 +334,19 @@ async function exportVideo(options: {
   if (available.length === 1 && !telemetryDir) {
     if (epoch) {
       args.push('-vf',
-        `drawtext=fontfile=${fontPath}:text='%{pts\\:localtime\\:${epoch}}':fontsize=24:fontcolor=white:borderw=2:bordercolor=black:x=w-tw-10:y=10`
+        `drawtext=fontfile=${fontPath}:text='%{pts\\:localtime\\:${epoch}}':fontsize=24:fontcolor=white:borderw=2:bordercolor=black:x=10:y=h-th-10`
       )
     }
     args.push('-c:v', 'libx264', '-preset', 'medium', '-crf', '23', '-c:a', 'aac', '-y', outputPath)
   } else {
     const filterParts: string[] = []
-    const labelMap: Record<string, string> = {
+    const isKo = app.getLocale().startsWith('ko')
+    const labelMap: Record<string, string> = isKo ? {
       front: '전면', back: '후면', left: '좌측', right: '우측',
       left_pillar: '좌측B필러', right_pillar: '우측B필러',
+    } : {
+      front: 'Front', back: 'Rear', left: 'Left', right: 'Right',
+      left_pillar: 'Left B-Pillar', right_pillar: 'Right B-Pillar',
     }
 
     for (let i = 0; i < available.length; i++) {
@@ -371,7 +375,7 @@ async function exportVideo(options: {
 
     if (epoch) {
       filterParts.push(
-        `[${currentBase}]drawtext=fontfile=${fontPath}:text='%{pts\\:localtime\\:${epoch}}':fontsize=28:fontcolor=white:borderw=2:bordercolor=black:x=${gridW}-tw-12:y=10[out]`
+        `[${currentBase}]drawtext=fontfile=${fontPath}:text='%{pts\\:localtime\\:${epoch}}':fontsize=28:fontcolor=white:borderw=2:bordercolor=black:x=12:y=${outH}-th-12[out]`
       )
     } else {
       filterParts.push(`[${currentBase}]null[out]`)

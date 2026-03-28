@@ -3,6 +3,8 @@ import VideoPlayer from './components/VideoPlayer'
 import ClipList from './components/ClipList'
 import { generateTelemetryFrames } from './utils/telemetry-canvas'
 
+const isKo = navigator.language.startsWith('ko')
+
 export default function App() {
   const [clips, setClips] = useState<ClipGroup[]>([])
   const [selectedClip, setSelectedClip] = useState<ClipGroup | null>(null)
@@ -43,17 +45,17 @@ export default function App() {
 
     // Generate telemetry panel frames if data available
     if (telemetry.length > 0) {
-      setExportStatus('텔레메트리 패널 렌더링 중...')
+      setExportStatus(isKo ? '텔레메트리 패널 렌더링 중...' : 'Rendering telemetry panel...')
       fps = Math.round(telemetry.length / videoDuration) || 36
       const pngFrames = await generateTelemetryFrames(telemetry, fps, (pct) => {
-        setExportStatus(`텔레메트리 렌더링 ${pct}%`)
+        setExportStatus(isKo ? `텔레메트리 렌더링 ${pct}%` : `Telemetry rendering ${pct}%`)
       })
 
-      setExportStatus('프레임 저장 중...')
+      setExportStatus(isKo ? '프레임 저장 중...' : 'Saving frames...')
       telemetryDir = await window.api.saveTelemetryFrames(pngFrames)
     }
 
-    setExportStatus('영상 합성 중...')
+    setExportStatus(isKo ? '영상 합성 중...' : 'Compositing video...')
     window.api.onExportProgress(() => {})
 
     const result = await window.api.exportVideo({
@@ -81,7 +83,7 @@ export default function App() {
     window.api.removeExportProgressListener()
     setIsExporting(false)
     setExportStatus('')
-    alert(result.success ? '내보내기 완료!' : `내보내기 실패: ${result.error}`)
+    alert(result.success ? (isKo ? '내보내기 완료!' : 'Export complete!') : (isKo ? `내보내기 실패: ${result.error}` : `Export failed: ${result.error}`))
   }, [selectedClip])
 
   return (
@@ -94,7 +96,7 @@ export default function App() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>TeslaCam Viewer</h1>
-          <button onClick={handleSelectFolder} className="btn-primary">폴더 열기</button>
+          <button onClick={handleSelectFolder} className="btn-primary">{isKo ? '폴더 열기' : 'Open Folder'}</button>
           {folderPath && (
             <span style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {folderPath}
@@ -113,7 +115,7 @@ export default function App() {
               }}
               style={{ accentColor: '#4ecdc4' }}
             />
-            자동 업데이트
+            {isKo ? '자동 업데이트' : 'Auto Update'}
           </label>
           {/* Update notification */}
           {updateInfo && (
@@ -125,7 +127,7 @@ export default function App() {
                 borderRadius: 4, cursor: 'pointer',
               }}
             >
-              v{updateInfo.latest} 업데이트
+              v{updateInfo.latest} {isKo ? '업데이트' : 'Update'}
             </button>
           )}
           {/* Version */}
@@ -157,12 +159,12 @@ export default function App() {
           ) : (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, color: 'var(--text-secondary)' }}>
               <div style={{ fontSize: 48, opacity: 0.3 }}>&#x1F3A5;</div>
-              <div style={{ fontSize: 16 }}>TeslaCam 폴더를 선택하세요</div>
+              <div style={{ fontSize: 16 }}>{isKo ? 'TeslaCam 폴더를 선택하세요' : 'Select a TeslaCam folder'}</div>
               <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-                폴더 내 영상 파일을 자동으로 인식하여 4채널 동시 재생합니다
+                {isKo ? '폴더 내 영상 파일을 자동으로 인식하여 4채널 동시 재생합니다' : 'Automatically detects video files and plays all channels simultaneously'}
               </div>
               <button onClick={handleSelectFolder} className="btn-primary" style={{ marginTop: 8 }}>
-                폴더 열기
+                {isKo ? '폴더 열기' : 'Open Folder'}
               </button>
             </div>
           )}
