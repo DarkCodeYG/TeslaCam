@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -13,6 +13,9 @@ export default function TelemetryPanel({ frame }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const leafletMap = useRef<L.Map | null>(null)
   const marker = useRef<L.Marker | null>(null)
+  const polyline = useRef<L.Polyline | null>(null)
+  const trackPoints = useRef<L.LatLngExpression[]>([])
+  const [zoom, setZoom] = useState(17)
 
   // Init map
   useEffect(() => {
@@ -22,7 +25,6 @@ export default function TelemetryPanel({ frame }: Props) {
       attributionControl: false,
     }).setView([37.48, 127.06], 17)
 
-    // Naver-style satellite tiles via OpenStreetMap
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
     }).addTo(map)
@@ -31,16 +33,40 @@ export default function TelemetryPanel({ frame }: Props) {
       radius: 7, color: '#e94560', fillColor: '#e94560', fillOpacity: 1, weight: 2,
     }).addTo(map)
 
+    polyline.current = L.polyline([], {
+      color: '#4ecdc4', weight: 3, opacity: 0.8,
+    }).addTo(map)
+
+    map.on('zoomend', () => setZoom(map.getZoom()))
+
     leafletMap.current = map
     return () => { map.remove(); leafletMap.current = null }
   }, [])
 
-  // Update map position
+  // Reset track when clip changes (lat/lon jumps far)
+  const lastPos = useRef<[number, number] | null>(null)
+
+  // Update map position + track
   useEffect(() => {
-    if (!frame || !leafletMap.current || !marker.current) return
+    if (!frame || !leafletMap.current || !marker.current || !polyline.current) return
     if (frame.lat !== 0 && frame.lon !== 0) {
       const pos: L.LatLngExpression = [frame.lat, frame.lon]
-      leafletMap.current.setView(pos, 17, { animate: false })
+
+      // Reset track if position jumps > 1km (new clip)
+      if (lastPos.current) {
+        const dlat = Math.abs(frame.lat - lastPos.current[0])
+        const dlon = Math.abs(frame.lon - lastPos.current[1])
+        if (dlat > 0.01 || dlon > 0.01) {
+          trackPoints.current = []
+          polyline.current.setLatLngs([])
+        }
+      }
+      lastPos.current = [frame.lat, frame.lon]
+
+      trackPoints.current.push(pos)
+      polyline.current.setLatLngs(trackPoints.current)
+
+      leafletMap.current.setView(pos, leafletMap.current.getZoom(), { animate: false })
       marker.current.setLatLng(pos)
     }
   }, [frame?.lat, frame?.lon])
@@ -61,39 +87,49 @@ export default function TelemetryPanel({ frame }: Props) {
       width: 260, background: '#0f0f1a', borderLeft: '1px solid #2a2a4a',
       display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0,
     }}>
-      {/* Speed */}
+      {/* Speed + Blinkers + Gear */}
       <div style={{ padding: '12px 16px', textAlign: 'center', borderBottom: '1px solid #1a1a2e' }}>
-        <div style={{ fontSize: 48, fontWeight: 700, color: '#fff', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-          {speedKmh.toFixed(0)}
-        </div>
-        <div style={{ fontSize: 13, color: '#666', marginTop: 2 }}>km/h</div>
-        <div style={{
-          fontSize: 12, marginTop: 6, padding: '2px 8px', display: 'inline-block',
-          borderRadius: 4, background: f.gear === 1 ? '#16213e' : '#2a1a1a',
-          color: f.gear === 1 ? '#4ecdc4' : '#e94560',
-        }}>
-          {GEARS[f.gear] || '?'}
-        </div>
-      </div>
-
-      {/* Steering Wheel + Blinkers */}
-      <div style={{ padding: '10px 16px', textAlign: 'center', borderBottom: '1px solid #1a1a2e' }}>
         <style>{`
           @keyframes blink {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.1; }
           }
         `}</style>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <div style={{ fontSize: 48, fontWeight: 700, color: '#fff', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+          {speedKmh.toFixed(0)}
+        </div>
+        <div style={{ fontSize: 13, color: '#666', marginTop: 2 }}>km/h</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6 }}>
           {/* Blinker Left */}
-          <svg width="28" height="40" viewBox="0 0 28 40">
+          <svg width="24" height="20" viewBox="0 0 24 20">
             <polygon
-              points="4,20 24,4 24,36"
+              points="2,10 20,2 20,18"
               fill={f.blinkerLeft ? '#f39c12' : '#2a2a4a'}
               style={f.blinkerLeft ? { animation: 'blink 0.8s ease-in-out infinite' } : {}}
             />
           </svg>
+          {/* Gear */}
+          <div style={{
+            fontSize: 12, padding: '2px 8px',
+            borderRadius: 4, background: f.gear === 1 ? '#16213e' : '#2a1a1a',
+            color: f.gear === 1 ? '#4ecdc4' : '#e94560',
+          }}>
+            {GEARS[f.gear] || '?'}
+          </div>
+          {/* Blinker Right */}
+          <svg width="24" height="20" viewBox="0 0 24 20">
+            <polygon
+              points="22,10 4,2 4,18"
+              fill={f.blinkerRight ? '#f39c12' : '#2a2a4a'}
+              style={f.blinkerRight ? { animation: 'blink 0.8s ease-in-out infinite' } : {}}
+            />
+          </svg>
+        </div>
+      </div>
 
+      {/* Steering Wheel */}
+      <div style={{ padding: '10px 16px', textAlign: 'center', borderBottom: '1px solid #1a1a2e' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {/* Wheel SVG */}
           <svg width="100" height="100" viewBox="-50 -50 100 100">
             <g transform={`rotate(${f.steeringAngle})`}>
@@ -104,15 +140,6 @@ export default function TelemetryPanel({ frame }: Props) {
               <circle cx="0" cy="0" r="10" fill="#333" stroke="#555" strokeWidth="2" />
               <circle cx="0" cy="-44" r="4" fill={apActive ? '#4ecdc4' : '#e94560'} />
             </g>
-          </svg>
-
-          {/* Blinker Right */}
-          <svg width="28" height="40" viewBox="0 0 28 40">
-            <polygon
-              points="24,20 4,4 4,36"
-              fill={f.blinkerRight ? '#f39c12' : '#2a2a4a'}
-              style={f.blinkerRight ? { animation: 'blink 0.8s ease-in-out infinite' } : {}}
-            />
           </svg>
         </div>
 
@@ -154,12 +181,45 @@ export default function TelemetryPanel({ frame }: Props) {
         <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
         {/* GPS info overlay */}
         <div style={{
-          position: 'absolute', bottom: 4, left: 4, right: 4,
+          position: 'absolute', bottom: 30, left: 4, right: 4,
           padding: '2px 6px', background: 'rgba(0,0,0,0.75)',
           borderRadius: 4, fontSize: 10, color: '#aaa', zIndex: 1000,
           fontVariantNumeric: 'tabular-nums',
         }}>
           {f.lat.toFixed(6)}, {f.lon.toFixed(6)} | {f.heading.toFixed(0)}°
+        </div>
+        {/* Zoom control */}
+        <div style={{
+          position: 'absolute', bottom: 4, left: 4, right: 4,
+          display: 'flex', alignItems: 'center', gap: 4, zIndex: 1000,
+        }}>
+          <button
+            onClick={() => leafletMap.current?.zoomOut()}
+            style={{
+              width: 22, height: 22, padding: 0, border: 'none', borderRadius: 3,
+              background: 'rgba(0,0,0,0.75)', color: '#aaa', fontSize: 14,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >-</button>
+          <input
+            type="range"
+            min={1} max={19} step={1}
+            value={zoom}
+            onChange={e => {
+              const z = Number(e.target.value)
+              setZoom(z)
+              leafletMap.current?.setZoom(z)
+            }}
+            style={{ flex: 1, height: 4, cursor: 'pointer', accentColor: '#4ecdc4' }}
+          />
+          <button
+            onClick={() => leafletMap.current?.zoomIn()}
+            style={{
+              width: 22, height: 22, padding: 0, border: 'none', borderRadius: 3,
+              background: 'rgba(0,0,0,0.75)', color: '#aaa', fontSize: 14,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >+</button>
         </div>
       </div>
     </div>

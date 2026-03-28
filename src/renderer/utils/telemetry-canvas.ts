@@ -53,8 +53,10 @@ async function preloadMapTiles(telemetry: TelemetryFrame[]): Promise<void> {
   await Promise.all(promises)
 }
 
-function drawMap(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, lat: number, lon: number) {
-  // Grey background
+function drawMap(
+  ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number,
+  lat: number, lon: number, heading: number, trackPoints: [number, number][],
+) {
   ctx.fillStyle = '#1a1a2e'
   ctx.fillRect(x, y, w, h)
 
@@ -63,7 +65,6 @@ function drawMap(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
   const centerPx = lonToPixel(lon, TILE_ZOOM)
   const centerPy = latToPixel(lat, TILE_ZOOM)
 
-  // Draw tiles centered on the GPS position
   const startTx = Math.floor((centerPx - w / 2) / TILE_SIZE)
   const startTy = Math.floor((centerPy - h / 2) / TILE_SIZE)
   const endTx = Math.floor((centerPx + w / 2) / TILE_SIZE)
@@ -86,6 +87,22 @@ function drawMap(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
     }
   }
 
+  // Draw track polyline
+  if (trackPoints.length > 1) {
+    ctx.strokeStyle = '#4ecdc4'
+    ctx.lineWidth = 3
+    ctx.globalAlpha = 0.8
+    ctx.beginPath()
+    for (let i = 0; i < trackPoints.length; i++) {
+      const px = x + (lonToPixel(trackPoints[i][1], TILE_ZOOM) - centerPx + w / 2)
+      const py = y + (latToPixel(trackPoints[i][0], TILE_ZOOM) - centerPy + h / 2)
+      if (i === 0) ctx.moveTo(px, py)
+      else ctx.lineTo(px, py)
+    }
+    ctx.stroke()
+    ctx.globalAlpha = 1
+  }
+
   // Position marker
   ctx.fillStyle = '#e94560'
   ctx.strokeStyle = '#fff'
@@ -103,7 +120,7 @@ function drawMap(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
   ctx.fillStyle = '#aaa'
   ctx.font = '10px monospace'
   ctx.textAlign = 'center'
-  ctx.fillText(`${lat.toFixed(5)}, ${lon.toFixed(5)} | ${0}°`, x + w / 2, y + h - 5)
+  ctx.fillText(`${lat.toFixed(5)}, ${lon.toFixed(5)} | ${heading.toFixed(0)}°`, x + w / 2, y + h - 5)
 }
 
 // ── Main render function ──
@@ -111,6 +128,7 @@ function drawMap(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
 export function renderTelemetryFrame(
   canvas: HTMLCanvasElement,
   frame: TelemetryFrame,
+  trackPoints?: [number, number][],
 ): void {
   canvas.width = PANEL_W
   canvas.height = PANEL_H
@@ -133,29 +151,32 @@ export function renderTelemetryFrame(
   ctx.font = '14px -apple-system, sans-serif'
   ctx.fillText('km/h', PANEL_W / 2, y + 85)
 
-  // Gear badge
+  // Blinkers + Gear badge
   const gear = GEARS[frame.gear] || '?'
   const gearColor = frame.gear === 1 ? '#4ecdc4' : '#e94560'
+  const gearY = y + 92
+
+  drawBlinkerArrow(ctx, PANEL_W / 2 - 36, gearY + 10, true, frame.blinkerLeft)
+
   ctx.fillStyle = frame.gear === 1 ? '#16213e' : '#2a1a1a'
-  roundRect(ctx, PANEL_W / 2 - 16, y + 92, 32, 20, 4)
+  roundRect(ctx, PANEL_W / 2 - 16, gearY, 32, 20, 4)
   ctx.fill()
   ctx.fillStyle = gearColor
   ctx.font = 'bold 13px -apple-system, sans-serif'
-  ctx.fillText(gear, PANEL_W / 2, y + 107)
+  ctx.fillText(gear, PANEL_W / 2, gearY + 15)
+
+  drawBlinkerArrow(ctx, PANEL_W / 2 + 36, gearY + 10, false, frame.blinkerRight)
 
   y += 125
   ctx.strokeStyle = '#1a1a2e'; ctx.lineWidth = 1
   ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(PANEL_W, y); ctx.stroke()
 
-  // ── Blinkers + Steering Wheel ──
+  // ── Steering Wheel ──
   y += 10
   const wheelCx = PANEL_W / 2
   const wheelCy = y + 55
   const apActive = frame.autopilot > 0
   const wheelColor = apActive ? '#4ecdc4' : '#555'
-
-  drawBlinkerArrow(ctx, wheelCx - 75, wheelCy, true, frame.blinkerLeft)
-  drawBlinkerArrow(ctx, wheelCx + 75, wheelCy, false, frame.blinkerRight)
 
   ctx.save()
   ctx.translate(wheelCx, wheelCy)
@@ -205,16 +226,16 @@ export function renderTelemetryFrame(
 
   // ── Map ──
   const mapH = PANEL_H - y
-  drawMap(ctx, 0, y, PANEL_W, mapH, frame.lat, frame.lon)
+  drawMap(ctx, 0, y, PANEL_W, mapH, frame.lat, frame.lon, frame.heading, trackPoints || [])
 }
 
 function drawBlinkerArrow(ctx: CanvasRenderingContext2D, cx: number, cy: number, isLeft: boolean, active: boolean) {
   ctx.fillStyle = active ? '#f39c12' : '#2a2a4a'
   ctx.beginPath()
   if (isLeft) {
-    ctx.moveTo(cx - 12, cy); ctx.lineTo(cx + 8, cy - 16); ctx.lineTo(cx + 8, cy + 16)
+    ctx.moveTo(cx - 10, cy); ctx.lineTo(cx + 6, cy - 10); ctx.lineTo(cx + 6, cy + 10)
   } else {
-    ctx.moveTo(cx + 12, cy); ctx.lineTo(cx - 8, cy - 16); ctx.lineTo(cx - 8, cy + 16)
+    ctx.moveTo(cx + 10, cy); ctx.lineTo(cx - 6, cy - 10); ctx.lineTo(cx - 6, cy + 10)
   }
   ctx.closePath(); ctx.fill()
 }
@@ -259,9 +280,14 @@ export async function generateTelemetryFrames(
   canvas.width = PANEL_W
   canvas.height = PANEL_H
   const frames: Uint8Array[] = []
+  const track: [number, number][] = []
 
   for (let i = 0; i < telemetry.length; i++) {
-    renderTelemetryFrame(canvas, telemetry[i])
+    const f = telemetry[i]
+    if (f.lat !== 0 && f.lon !== 0) {
+      track.push([f.lat, f.lon])
+    }
+    renderTelemetryFrame(canvas, f, track)
     const blob = await new Promise<Blob>((resolve) =>
       canvas.toBlob(b => resolve(b!), 'image/png')
     )
